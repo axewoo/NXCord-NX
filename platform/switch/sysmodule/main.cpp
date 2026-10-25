@@ -5,6 +5,7 @@
 #include <nxcord/util.hpp>
 
 #include <switch.h>
+#include <malloc.h>
 #include <sys/stat.h>
 
 #include <algorithm>
@@ -23,8 +24,10 @@ void __libnx_init_time(void);
 u32 __nx_applet_type = AppletType_None;
 u32 __nx_fs_num_sessions = 1;
 
-// Everything (TLS, JSON, Opus, MLS, thread stacks) lives in this heap.
-#define INNER_HEAP_SIZE 0x400000
+// Everything (TLS, JSON, Opus, MLS, thread stacks) lives in this heap. It
+// comes out of the system memory pool, which Horizon itself needs too, so
+// keep it small.
+#define INNER_HEAP_SIZE 0x1C0000
 size_t nx_inner_heap_size = INNER_HEAP_SIZE;
 char nx_inner_heap[INNER_HEAP_SIZE];
 
@@ -54,12 +57,12 @@ void __appInit(void) {
 
   static const SocketInitConfig socket_config = {
       .tcp_tx_buf_size = 0x1000,
-      .tcp_rx_buf_size = 0x4000,
-      .tcp_tx_buf_max_size = 0x8000,
-      .tcp_rx_buf_max_size = 0x20000,
+      .tcp_rx_buf_size = 0x2000,
+      .tcp_tx_buf_max_size = 0x4000,
+      .tcp_rx_buf_max_size = 0x10000,
       .udp_tx_buf_size = 0x2400,
       .udp_rx_buf_size = 0xA500,
-      .sb_efficiency = 2,
+      .sb_efficiency = 1,
       .num_bsd_sessions = 3,
       .bsd_service_type = BsdServiceType_Auto,
   };
@@ -152,14 +155,27 @@ class NxcordService {
 
     // Rejoin the last channel once the gateway is up.
     bool rejoin_pending = _config.auto_rejoin && !_config.last_channel.empty();
-    while (true) {
+    int64_t last_heap_log = 0;
+    while (!_shutdown) {
       if (rejoin_pending && _client.status().gateway == Gateway::Status::Ready) {
         log::info("rejoining last voice channel");
         _client.joinVoice(_config.last_guild, _config.last_channel);
         rejoin_pending = false;
       }
+      if (nowMs() - last_heap_log > 60'000) {
+        last_heap_log = nowMs();
+        struct mallinfo mi = mallinfo();
+        log::info("heap: %u KB used, %u KB peak of %u KB", unsigned(mi.uordblks / 1024), unsigned(mi.arena / 1024),
+                  unsigned(INNER_HEAP_SIZE / 1024));
+      }
       if (!_server.process(500'000'000)) break;
     }
+
+    log::info("shutting down");
+    _client.leaveVoice();
+    sleepMs(500);  // let the gateway send the leave
+    _client.stop();
+    _audio.stop();
   }
 
  private:
@@ -299,6 +315,9 @@ class NxcordService {
         applySettings();
         break;
       }
+      case ipc::Cmd::Shutdown:
+        _shutdown = true;
+        break;
       case ipc::Cmd::Reconnect:
         _token = readToken();
         if (_token.empty()) {
@@ -336,6 +355,9 @@ class NxcordService {
     s.mic_level = static_cast<u32>(st.mic_level);
     s.voice_guild = toU64(st.voice_guild);
     s.voice_channel = toU64(st.voice_channel);
+    struct mallinfo mi = mallinfo();
+    s.heap_used_kb = static_cast<u32>(mi.uordblks / 1024);
+    s.heap_peak_kb = static_cast<u32>(mi.arena / 1024);
     copyString(s.error, sizeof(s.error), !st.voice_error.empty() ? st.voice_error : st.gateway_error);
     Guild g;
     if (!st.voice_guild.empty() && _client.guild(st.voice_guild, g)) {
@@ -352,6 +374,7 @@ class NxcordService {
   IpcServer _server;
   Config _config;
   std::string _token;
+  bool _shutdown = false;
 };
 
 }  // namespace

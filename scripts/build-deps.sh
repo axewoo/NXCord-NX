@@ -38,7 +38,7 @@ CMAKE_ARGS=(-DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PREFIX" -DCMAKE_INS
 
 if [ "$PLATFORM" = switch ]; then
   : "${DEVKITPRO:=/opt/devkitpro}"
-  CMAKE_ARGS+=(-DCMAKE_TOOLCHAIN_FILE="$DEVKITPRO/cmake/Switch.cmake")
+  CMAKE_ARGS+=(-DCMAKE_TOOLCHAIN_FILE="$DEVKITPRO/cmake/Switch.cmake" -DCMAKE_BUILD_TYPE=MinSizeRel)
   fetch openssl https://github.com/openssl/openssl "$OPENSSL_TAG"
   if [ ! -f "$PREFIX/lib/libcrypto.a" ]; then
     rm -rf "$BUILD/openssl" && cp -r "$SRC/openssl" "$BUILD/openssl"
@@ -46,11 +46,17 @@ if [ "$PLATFORM" = switch ]; then
       cd "$BUILD/openssl"
       export PATH="$DEVKITPRO/devkitA64/bin:$PATH"
       export CC=aarch64-none-elf-gcc AR=aarch64-none-elf-ar RANLIB=aarch64-none-elf-ranlib
-      export CFLAGS="-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE -ffunction-sections -fdata-sections -O2 -D__SWITCH__ -I$DEVKITPRO/libnx/include -DOPENSSL_NO_SECURE_MEMORY -DNO_SYSLOG"
+      export CFLAGS="-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE -ffunction-sections -fdata-sections -Os -D__SWITCH__ -I$DEVKITPRO/libnx/include -DOPENSSL_NO_SECURE_MEMORY -DNO_SYSLOG"
       # No OS services we can't provide: entropy comes from getentropy(),
       # which platform/switch/compat implements with the kernel CSPRNG.
+      # Everything MLS doesn't use is left out: the sysmodule's code sits in
+      # the Switch's small system memory pool.
       ./Configure linux-generic64 no-asm no-shared no-dso no-threads no-sock no-ui-console no-tests \
-        no-engine no-afalgeng no-async --prefix="$PREFIX" --openssldir="$PREFIX/ssl" \
+        no-engine no-afalgeng no-async no-autoload-config no-err no-legacy no-deprecated \
+        no-aria no-bf no-blake2 no-camellia no-cast no-cms no-comp no-ct no-des no-dh no-dsa no-ec2m \
+        no-idea no-md4 no-mdc2 no-ocb no-ocsp no-rc2 no-rc4 no-rc5 no-rmd160 no-seed \
+        no-siphash no-sm2 no-sm3 no-sm4 no-srp no-ts no-whirlpool \
+        --prefix="$PREFIX" --openssldir="$PREFIX/ssl" \
         -DOPENSSL_RAND_SEED_OS >/dev/null
       make -j"$JOBS" build_libs >/dev/null
       make install_dev >/dev/null

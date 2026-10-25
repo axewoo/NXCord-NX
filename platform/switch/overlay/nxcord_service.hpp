@@ -45,6 +45,7 @@ class NxcordService {
     return serviceDispatchIn(&_srv, u32(ipc::Cmd::SetUserVolume), in);
   }
   Result reconnect() { return serviceDispatch(&_srv, u32(ipc::Cmd::Reconnect)); }
+  Result shutdown() { return serviceDispatch(&_srv, u32(ipc::Cmd::Shutdown)); }
 
   std::vector<ipc::GuildEntry> guilds() { return list<ipc::GuildEntry>(ipc::Cmd::GetGuilds, nullptr, 0, 100); }
   std::vector<ipc::ChannelEntry> channels(u64 guild) {
@@ -72,6 +73,17 @@ class NxcordService {
 
   Service _srv{};
 };
+
+// Free memory in the system pool, which sysmodules (and Horizon) share.
+inline u64 systemPoolFree() {
+  u64 total = 0, used = 0;
+  if (R_FAILED(svcGetSystemInfo(&total, SystemInfoType_TotalPhysicalMemorySize, INVALID_HANDLE,
+                                PhysicalMemorySystemInfo_System)) ||
+      R_FAILED(svcGetSystemInfo(&used, SystemInfoType_UsedPhysicalMemorySize, INVALID_HANDLE,
+                                PhysicalMemorySystemInfo_System)))
+    return 0;
+  return total > used ? total - used : 0;
+}
 
 inline NxcordService &service() {
   static NxcordService s;

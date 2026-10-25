@@ -33,10 +33,16 @@ headsets are output-only.
 1. Download `NXCord-NX.zip` from the latest release (or the `NXCord-NX-sd` CI artifact) and
    copy its contents to the root of the SD card.
 2. Put your bot token alone on the first line of `/config/nxcord/token.txt`.
-3. Reboot. Open Ultrahand (L + D-pad Down + R3), pick **NXCord**, then **Join a channel**.
+3. Open Ultrahand (L + D-pad Down + R3), pick **NXCord**, then **Start NXCord**,
+   then **Join a channel**.
 
 The sysmodule keeps the call running while you play; the overlay only controls
-it. Settings (mic sensitivity, mic boost, call volume, rejoin last channel)
+it. It needs about 5.5 MB of the Switch's system memory pool, which other
+sysmodules and Horizon itself share, so it doesn't start at boot unless you turn
+on **Start at boot** in Settings. The overlay checks free memory before starting
+it. Use **Turn NXCord off** in Settings to give the memory back. If the console
+ever fails to boot with it enabled, delete
+`/atmosphere/contents/5600000000000000/flags/boot2.flag` from the SD card. Settings (mic sensitivity, mic boost, call volume, rejoin last channel)
 are in the overlay and saved to `/config/nxcord/settings.ini`. Set
 `verbose_log=1` there for a detailed log.
 

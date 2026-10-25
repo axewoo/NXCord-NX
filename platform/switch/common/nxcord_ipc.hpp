@@ -11,7 +11,9 @@
 namespace nxcord::ipc {
 
 constexpr const char *kServiceName = "nxcord";
-constexpr u32 kProtocolVersion = 1;
+constexpr u32 kProtocolVersion = 2;
+constexpr u64 kProgramId = 0x5600000000000000;
+constexpr const char *kBootFlagPath = "sdmc:/atmosphere/contents/5600000000000000/flags/boot2.flag";
 
 enum class Cmd : u32 {
   GetStatus = 0,       // out: Status
@@ -26,6 +28,7 @@ enum class Cmd : u32 {
   GetSettings = 9,     // out: Settings
   SetSettings = 10,    // in: Settings
   Reconnect = 11,      // re-reads the token file and reconnects
+  Shutdown = 12,       // leaves the call and exits the sysmodule
 };
 
 enum class GatewayState : u8 { NoToken, Disconnected, Connecting, Ready, AuthFailed };
@@ -44,6 +47,8 @@ struct Status {
   u32 mic_level;  // RMS 0..32767 of the last mic frame
   u64 voice_guild;
   u64 voice_channel;
+  u32 heap_used_kb;
+  u32 heap_peak_kb;  // high-water mark of the sysmodule heap
   char error[64];
   char guild_name[32];
   char channel_name[32];

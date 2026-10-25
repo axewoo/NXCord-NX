@@ -21,9 +21,9 @@ cmake --build "$ROOT/build-switch" -j"$(nproc)"
 # SD card layout
 OUT=$ROOT/build-switch/sd
 rm -rf "$OUT"
-mkdir -p "$OUT/atmosphere/contents/5600000000000000/flags" "$OUT/switch/.overlays" "$OUT/config/nxcord"
+mkdir -p "$OUT/atmosphere/contents/5600000000000000" "$OUT/switch/.overlays" "$OUT/config/nxcord"
 cp "$ROOT/build-switch/exefs.nsp" "$OUT/atmosphere/contents/5600000000000000/exefs.nsp"
-touch "$OUT/atmosphere/contents/5600000000000000/flags/boot2.flag"
+# No boot2.flag: the overlay starts the sysmodule (and can turn on start at boot).
 cp "$ROOT/platform/switch/sysmodule/toolbox.json" "$OUT/atmosphere/contents/5600000000000000/toolbox.json"
 cp "$ROOT/build-switch/nxcord.ovl" "$OUT/switch/.overlays/nxcord.ovl"
 printf 'PASTE_YOUR_BOT_TOKEN_HERE\n' > "$OUT/config/nxcord/token.txt.example"

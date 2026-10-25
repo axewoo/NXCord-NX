@@ -4,6 +4,8 @@
 #define TESLA_INIT_IMPL
 #include <tesla.hpp>
 
+#include <sys/stat.h>
+
 #include <cstdio>
 #include <string>
 
@@ -15,6 +17,31 @@ using nxcord::ovl::service;
 namespace {
 
 constexpr const char *kTitle = "NXCord";
+
+// What the sysmodule takes from the system pool (code + heap + stack,
+// measured from the build), and what we leave free for Horizon after that.
+constexpr u64 kSysmoduleFootprint = NXCORD_SYS_FOOTPRINT;
+constexpr u64 kMinFreeAfterStart = 0x180000;
+
+std::string megabytes(u64 bytes) {
+  char buf[16];
+  std::snprintf(buf, sizeof(buf), "%.1f MB", bytes / 1048576.0);
+  return buf;
+}
+
+bool bootFlagSet() {
+  struct stat st;
+  return stat(ipc::kBootFlagPath, &st) == 0;
+}
+
+void setBootFlag(bool on) {
+  if (on) {
+    mkdir("sdmc:/atmosphere/contents/5600000000000000/flags", 0777);
+    if (FILE *f = std::fopen(ipc::kBootFlagPath, "w")) std::fclose(f);
+  } else {
+    std::remove(ipc::kBootFlagPath);
+  }
+}
 
 // Guis to pop after joining a channel. Popping inside a click listener would
 // destroy the element that is running, so update() does it a frame later.
@@ -48,24 +75,83 @@ std::string voiceText(const ipc::Status &s) {
   return "?";
 }
 
-// Shown when the sysmodule isn't running (not installed, or needs a reboot).
+class GuiMain;
+
+// Shown when the sysmodule isn't running. It doesn't start at boot by
+// default, so this is where you turn it on.
 class GuiNoService : public tsl::Gui {
  public:
   tsl::elm::Element *createUI() override {
     auto *frame = new tsl::elm::OverlayFrame(kTitle, NXCORD_VERSION);
     auto *list = new tsl::elm::List();
-    list->addItem(new tsl::elm::CategoryHeader("Sysmodule not running"));
+    list->addItem(new tsl::elm::CategoryHeader("NXCord is off"));
+    _start = new tsl::elm::ListItem("Start NXCord");
+    _start->setClickListener([this](u64 keys) {
+      if (!(keys & HidNpadButton_A) || _launched) return false;
+      start();
+      return true;
+    });
+    list->addItem(_start);
+    _memory = new tsl::elm::ListItem("System memory free", megabytes(ovl::systemPoolFree()));
+    list->addItem(_memory);
+    list->addItem(new tsl::elm::ListItem("NXCord needs", megabytes(kSysmoduleFootprint)));
     list->addItem(new tsl::elm::CustomDrawer([](tsl::gfx::Renderer *r, s32 x, s32 y, s32 w, s32 h) {
-                    r->drawString("Copy atmosphere/contents/5600000000000000\n"
-                                  "to your SD card and reboot.\n\n"
-                                  "Then put your bot token in\n"
-                                  "/config/nxcord/token.txt",
+                    r->drawString("Put your bot token in\n/config/nxcord/token.txt first.\n\n"
+                                  "If it won't start, close other\nsysmodules to free memory.",
                                   false, x + 20, y + 30, 18, r->a(tsl::style::color::ColorText));
                   }),
-                  160);
+                  130);
     frame->setContent(list);
     return frame;
   }
+
+  void update() override {
+    // Back from the main screen: close instead of showing this again.
+    if (_shown_main) {
+      tsl::goBack();
+      return;
+    }
+    if (!_launched || ++_ticks % 15 != 0) return;
+    if (R_SUCCEEDED(service().open())) {
+      _shown_main = true;
+      tsl::changeTo<GuiMain>();
+    } else if (_ticks > 60 * 10) {
+      _launched = false;
+      _start->setText("Start NXCord");
+      _start->setValue("didn't start", true);
+    }
+  }
+
+ private:
+  void start() {
+    u64 free = ovl::systemPoolFree();
+    _memory->setValue(megabytes(free));
+    if (free < kSysmoduleFootprint + kMinFreeAfterStart) {
+      _start->setValue("not enough memory", true);
+      return;
+    }
+    if (R_FAILED(pmshellInitialize())) {
+      _start->setValue("pm unavailable", true);
+      return;
+    }
+    NcmProgramLocation loc{.program_id = ipc::kProgramId, .storageID = NcmStorageId_None};
+    u64 pid = 0;
+    Result rc = pmshellLaunchProgram(0, &loc, &pid);
+    pmshellExit();
+    if (R_FAILED(rc)) {
+      char err[32];
+      std::snprintf(err, sizeof(err), "error 0x%x", rc);
+      _start->setValue(err, true);
+      return;
+    }
+    _launched = true;
+    _ticks = 0;
+    _start->setValue("starting...", true);
+  }
+
+  tsl::elm::ListItem *_start = nullptr, *_memory = nullptr;
+  bool _launched = false, _shown_main = false;
+  u32 _ticks = 0;
 };
 
 class GuiMembers : public tsl::Gui {
@@ -242,6 +328,24 @@ class GuiSettings : public tsl::Gui {
       return true;
     });
     list->addItem(reconnect);
+    auto *boot = new tsl::elm::ToggleListItem("Start at boot", bootFlagSet());
+    boot->setStateChangedListener([](bool on) { setBootFlag(on); });
+    list->addItem(boot);
+    auto *off = new tsl::elm::ListItem("Turn NXCord off");
+    off->setClickListener([](u64 keys) {
+      if (!(keys & HidNpadButton_A)) return false;
+      service().shutdown();
+      service().close();
+      tsl::Overlay::get()->close();
+      return true;
+    });
+    list->addItem(off);
+
+    list->addItem(new tsl::elm::CategoryHeader("Memory"));
+    _memory = new tsl::elm::ListItem("NXCord heap");
+    list->addItem(_memory);
+    _free = new tsl::elm::ListItem("System free");
+    list->addItem(_free);
 
     frame->setContent(list);
     return frame;
@@ -251,6 +355,8 @@ class GuiSettings : public tsl::Gui {
     if (++_ticks % 6 != 0) return;
     ipc::Status st;
     if (R_FAILED(service().status(st))) return;
+    _memory->setValue(std::to_string(st.heap_used_kb) + " / " + std::to_string(st.heap_peak_kb) + " KB");
+    _free->setValue(megabytes(ovl::systemPoolFree()));
     if (!st.mic_available) {
       _level->setValue("No mic", true);
       return;
@@ -264,7 +370,7 @@ class GuiSettings : public tsl::Gui {
 
  private:
   ipc::Settings _settings{};
-  tsl::elm::ListItem *_level = nullptr;
+  tsl::elm::ListItem *_level = nullptr, *_memory = nullptr, *_free = nullptr;
   u32 _ticks = 0;
 };
 

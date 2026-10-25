@@ -210,8 +210,24 @@ bool Gateway::updateVoiceState(const Snowflake &guild_id, const Snowflake &chann
   return _ws.sendText(vs.dump());
 }
 
+// Big parts of GUILD_CREATE we never read. Dropping them while parsing keeps
+// the JSON tree small, which matters in the sysmodule's little heap.
+static bool skipUnusedKeys(int depth, json::parse_event_t event, json &parsed) {
+  if (event != json::parse_event_t::key || depth < 2) return true;
+  static const char *const kUnused[] = {
+      "roles",          "emojis",          "stickers",          "presences",
+      "threads",        "features",        "stage_instances",   "guild_scheduled_events",
+      "soundboard_sounds", "permission_overwrites", "embedded_activities", "activity_instances",
+  };
+  const auto &key = parsed.get_ref<const std::string &>();
+  for (const char *k : kUnused) {
+    if (key == k) return false;
+  }
+  return true;
+}
+
 void Gateway::handleMessage(const std::string &msg) {
-  json j = json::parse(msg, nullptr, false);
+  json j = json::parse(msg, skipUnusedKeys, false);
   if (j.is_discarded()) {
     log::error("gateway: invalid JSON");
     return;
