@@ -7,8 +7,7 @@ encryption, and **DAVE end-to-end encryption** (Discord's
 [libdave](https://github.com/discord/libdave) + Cisco
 [mlspp](https://github.com/cisco/mlspp) + OpenSSL 3, cross-compiled for Horizon).
 
-> **Work in progress.** The portable core and a Linux test CLI build today; the
-> Switch sysmodule and Ultrahand/Tesla overlay are next.
+> **Beta.** Needs testing on real calls. Please report what `/config/nxcord/log.txt` says.
 
 ## Bot account, not your account
 
@@ -24,6 +23,22 @@ something like "Axel (Switch)"), and only in servers you've invited it to.
    invite the bot to your server.
 
 No privileged intents are needed.
+
+## Installing on the Switch
+
+Needs Atmosphère and Ultrahand (or any Tesla overlay loader), plus a **wired USB
+headset or USB mic** for talking: the Switch has no built-in mic, and Bluetooth
+headsets are output-only.
+
+1. Download `NXCord-NX.zip` from the latest release (or the `NXCord-NX-sd` CI artifact) and
+   copy its contents to the root of the SD card.
+2. Put your bot token alone on the first line of `/config/nxcord/token.txt`.
+3. Reboot. Open Ultrahand (L + D-pad Down + R3), pick **NXCord**, then **Join a channel**.
+
+The sysmodule keeps the call running while you play; the overlay only controls
+it. Settings (mic sensitivity, mic boost, call volume, rejoin last channel)
+are in the overlay and saved to `/config/nxcord/settings.ini`. Set
+`verbose_log=1` there for a detailed log.
 
 ## Testing on a PC first (nxcord-cli)
 
@@ -60,12 +75,25 @@ Add `--verbose` to see every gateway/DAVE step. The status line says
 |------|------|
 | `core/` | Portable C++17: TLS (mbedTLS), websocket, gateway, voice + DAVE, Opus mixer |
 | `platform/linux/` | `nxcord-cli` test tool |
-| `platform/switch/` | Sysmodule, overlay (in progress) |
+| `platform/switch/sysmodule/` | Background sysmodule: Discord client, audin/audout, IPC service `nxcord` |
+| `platform/switch/overlay/` | Tesla/Ultrahand overlay (libtesla) |
+| `scripts/build-switch.sh` | Builds everything for Switch inside `devkitpro/devkita64` |
 | `scripts/build-deps.sh` | Builds OpenSSL 3 (Switch), mlspp and libdave into `deps/<platform>` |
+
+## Building for Switch
+
+```sh
+docker run --rm -v "$PWD:/src" -w /src devkitpro/devkita64 scripts/build-switch.sh
+```
+
+The first run builds OpenSSL 3, mlspp and libdave for Horizon (~3 min). Output
+is `build-switch/sd/` (SD card layout) and `build-switch/NXCord-NX.zip`.
 
 ## Credits
 
 - Original NXCord by Willi Ye (Grarak), MIT.
 - [libdave](https://github.com/discord/libdave) (MIT), [mlspp](https://github.com/cisco/mlspp) (BSD-2),
   OpenSSL (Apache-2.0), libsodium, Opus, mbedTLS, nlohmann/json.
+- [libtesla](https://github.com/WerWolv/libtesla) (GPL-2.0) for the overlay, so the overlay
+  binary is GPL-2.0.
 - Protocol details cross-checked against [D++](https://github.com/brainboxdotcc/DPP).

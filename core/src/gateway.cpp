@@ -120,7 +120,7 @@ void Gateway::tick(int timeout_ms) {
     if (!_ws.connect(url)) {
       setError("connect failed: " + _ws.error());
       _reconnect_at = nowMs() + _reconnect_delay;
-      _reconnect_delay = std::min(_reconnect_delay * 2, 60000);
+      _reconnect_delay = std::min(_reconnect_delay * 2, 15000);
       return;
     }
     _heartbeat_interval = 0;
@@ -172,7 +172,7 @@ void Gateway::tick(int timeout_ms) {
         break;
     }
     _reconnect_at = nowMs() + _reconnect_delay;
-    _reconnect_delay = std::min(_reconnect_delay * 2, 60000);
+    _reconnect_delay = std::min(_reconnect_delay * 2, 15000);
     if (onStateChanged) onStateChanged();
   }
 }

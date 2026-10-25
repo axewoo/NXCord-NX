@@ -2,16 +2,45 @@ name: Build
 
 on:
   push:
+    branches: ['**']
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
+  switch:
+    runs-on: ubuntu-24.04
+    container: devkitpro/devkita64:latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Cache DAVE dependencies
+        uses: actions/cache@v4
+        with:
+          path: deps/switch
+          key: deps-switch-${{ hashFiles('scripts/build-deps.sh') }}
+      - name: Build sysmodule + overlay
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          scripts/build-switch.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NXCord-NX-sd
+          path: build-switch/sd
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build-switch/NXCord-NX.zip
+
   linux-cli:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
       - name: Install packages
-        run: sudo apt-get update && sudo apt-get install -y cmake libmbedtls-dev libsodium-dev libopus-dev libssl-dev
+        run: sudo apt-get update && sudo apt-get install -y cmake libsodium-dev libopus-dev libssl-dev
       - name: Cache DAVE dependencies
         uses: actions/cache@v4
         with:
