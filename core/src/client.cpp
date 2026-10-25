@@ -1,5 +1,6 @@
 #include <nxcord/client.hpp>
 #include <nxcord/log.hpp>
+#include <nxcord/util.hpp>
 
 #include <algorithm>
 
@@ -95,15 +96,23 @@ void Client::joinVoice(const Snowflake &guild_id, const Snowflake &channel_id) {
 }
 
 void Client::leaveVoice() {
-  std::scoped_lock lock(_mutex);
-  dropVoice();
-  if (!_target_guild.empty()) {
-    _leave_guild = _target_guild;
-    _pending_leave = true;
+  std::shared_ptr<VoiceConnection> voice;
+  {
+    std::scoped_lock lock(_mutex);
+    // Queue the leave before stopping the call, so a voice thread that is
+    // slow to stop can't keep the bot in the channel.
+    if (!_target_guild.empty()) {
+      _leave_guild = _target_guild;
+      _pending_leave = true;
+    }
+    voice = std::move(_voice);
+    _mixer.clear();
+    _speaking = false;
+    _target_guild.clear();
+    _target_channel.clear();
+    _voice_state = VoiceState::Idle;
   }
-  _target_guild.clear();
-  _target_channel.clear();
-  _voice_state = VoiceState::Idle;
+  if (voice) voice->stop();
 }
 
 void Client::setSelfMute(bool mute) {
@@ -146,37 +155,46 @@ void Client::maybeStartVoice() {
 
 void Client::run() {
   while (_running) {
-    _gateway.tick(50);
-
-    std::scoped_lock lock(_mutex);
-    if (_gateway.status() != Gateway::Status::Ready) continue;
-
-    if (_pending_leave) {
-      if (_gateway.updateVoiceState(_leave_guild, "", false, false)) _pending_leave = false;
+    try {
+      step();
+    } catch (const std::exception &e) {
+      log::error("client: %s", e.what());
+      sleepMs(100);
     }
-    if (_pending_join) {
-      if (_gateway.updateVoiceState(_target_guild, _target_channel, _self_mute, _self_deaf)) {
-        _pending_join = false;
-        _pending_state = false;
-      }
-    } else if (_pending_state && !_target_channel.empty()) {
-      if (_gateway.updateVoiceState(_target_guild, _target_channel, _self_mute, _self_deaf)) _pending_state = false;
-    }
+  }
+}
 
-    if (_voice) {
-      switch (_voice->state()) {
-        case VoiceConnection::State::Connected:
-          _voice_state = VoiceState::Connected;
-          break;
-        case VoiceConnection::State::Failed:
-          _voice_error = _voice->error();
-          _voice_state = VoiceState::Failed;
-          log::info("client: voice failed: %s", _voice_error.c_str());
-          dropVoice();
-          break;
-        default:
-          break;
-      }
+void Client::step() {
+  _gateway.tick(50);
+
+  std::scoped_lock lock(_mutex);
+  if (_gateway.status() != Gateway::Status::Ready) return;
+
+  if (_pending_leave) {
+    if (_gateway.updateVoiceState(_leave_guild, "", false, false)) _pending_leave = false;
+  }
+  if (_pending_join) {
+    if (_gateway.updateVoiceState(_target_guild, _target_channel, _self_mute, _self_deaf)) {
+      _pending_join = false;
+      _pending_state = false;
+    }
+  } else if (_pending_state && !_target_channel.empty()) {
+    if (_gateway.updateVoiceState(_target_guild, _target_channel, _self_mute, _self_deaf)) _pending_state = false;
+  }
+
+  if (_voice) {
+    switch (_voice->state()) {
+      case VoiceConnection::State::Connected:
+        _voice_state = VoiceState::Connected;
+        break;
+      case VoiceConnection::State::Failed:
+        _voice_error = _voice->error();
+        _voice_state = VoiceState::Failed;
+        log::info("client: voice failed: %s", _voice_error.c_str());
+        dropVoice();
+        break;
+      default:
+        break;
     }
   }
 }

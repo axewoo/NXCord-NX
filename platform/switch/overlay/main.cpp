@@ -137,6 +137,11 @@ class GuiNoService : public tsl::Gui {
     NcmProgramLocation loc{.program_id = ipc::kProgramId, .storageID = NcmStorageId_None};
     u64 pid = 0;
     Result rc = pmshellLaunchProgram(0, &loc, &pid);
+    // Still running but stuck (its service is gone): end it and try again.
+    if (R_FAILED(rc) && R_SUCCEEDED(pmshellTerminateProgram(ipc::kProgramId))) {
+      svcSleepThread(500'000'000);
+      rc = pmshellLaunchProgram(0, &loc, &pid);
+    }
     pmshellExit();
     if (R_FAILED(rc)) {
       char err[32];
@@ -433,7 +438,12 @@ class GuiMain : public tsl::Gui {
 
   void update() override {
     if (++_ticks % 20 != 0) return;
-    if (R_SUCCEEDED(service().status(_status))) refresh();
+    if (R_SUCCEEDED(service().status(_status))) {
+      refresh();
+    } else {
+      _discord->setValue("NXCord stopped", true);
+      _voice->setValue("", true);
+    }
   }
 
  private:

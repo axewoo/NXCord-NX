@@ -129,6 +129,16 @@ bool VoiceConnection::connectWebsocket(bool resume) {
 }
 
 void VoiceConnection::run() {
+  // An uncaught exception (bad_alloc, a malformed JSON field) would abort
+  // the whole sysmodule; fail just this call instead.
+  try {
+    runLoop();
+  } catch (const std::exception &e) {
+    fail(std::string("internal error: ") + e.what());
+  }
+}
+
+void VoiceConnection::runLoop() {
   if (!connectWebsocket(false)) {
     fail("could not reach the voice server");
     return;

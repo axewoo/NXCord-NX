@@ -56,6 +56,7 @@ class Client {
 
  private:
   void run();
+  void step();
   void maybeStartVoice();
   void dropVoice();
 

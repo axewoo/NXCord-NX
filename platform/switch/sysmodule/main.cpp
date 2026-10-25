@@ -27,7 +27,7 @@ u32 __nx_fs_num_sessions = 1;
 // Everything (TLS, JSON, Opus, MLS, thread stacks) lives in this heap. It
 // comes out of the system memory pool, which Horizon itself needs too, so
 // keep it small.
-#define INNER_HEAP_SIZE 0x1C0000
+#define INNER_HEAP_SIZE 0x280000
 size_t nx_inner_heap_size = INNER_HEAP_SIZE;
 char nx_inner_heap[INNER_HEAP_SIZE];
 
@@ -172,6 +172,7 @@ class NxcordService {
     }
 
     log::info("shutting down");
+    startExitWatchdog();
     _client.leaveVoice();
     sleepMs(500);  // let the gateway send the leave
     _client.stop();
@@ -179,6 +180,18 @@ class NxcordService {
   }
 
  private:
+  // A stuck network thread must not keep the process (and the bot in the
+  // call) alive: exit anyway after a few seconds.
+  static void startExitWatchdog() {
+    static Thread watchdog;
+    auto entry = [](void *) {
+      svcSleepThread(4'000'000'000);
+      log::info("shutdown took too long, exiting");
+      svcExitProcess();
+    };
+    if (R_SUCCEEDED(threadCreate(&watchdog, entry, nullptr, nullptr, 0x4000, 0x2C, -2))) threadStart(&watchdog);
+  }
+
   void applySettings() {
     _client.encoder().setGateThreshold(_config.mic_threshold);
     _client.encoder().setGain(_config.mic_gain / 100.0f);

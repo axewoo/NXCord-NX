@@ -55,6 +55,7 @@ class VoiceConnection {
 
  private:
   void run();
+  void runLoop();
   bool connectWebsocket(bool resume);
   void handleText(const std::string &msg);
   void handleBinary(const std::string &msg);
