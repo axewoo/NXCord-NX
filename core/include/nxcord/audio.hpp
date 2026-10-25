@@ -2,9 +2,9 @@
 
 #include <nxcord/model.hpp>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
-#include <deque>
 #include <map>
 #include <mutex>
 #include <set>
@@ -40,18 +40,28 @@ class AudioMixer {
   std::set<Snowflake> speakingUsers() const;
 
  private:
+  static constexpr size_t kMaxBuffered = 8;  // 160 ms
+  static constexpr int kMaxPacketSamples = 5760;  // 120 ms, the largest Opus packet
+
+  // Fixed-size buffers only: the sysmodule heap is small, and allocating
+  // per packet fragments it until allocations fail mid-call.
   struct Stream {
     Snowflake user_id;
     OpusDecoder *decoder = nullptr;
-    std::deque<std::vector<int16_t>> frames;
+    std::array<std::array<int16_t, kFrameValues>, kMaxBuffered> ring;
+    size_t head = 0, count = 0;
     bool started = false;
     bool have_seq = false;
     uint16_t last_seq = 0;
     int64_t last_heard = 0;
   };
 
+  static void enqueue(Stream &s, const int16_t *frame);
+
   mutable std::mutex _mutex;
   std::map<uint32_t, Stream> _streams;
+  std::array<int16_t, kMaxPacketSamples * kChannels> _decoded;
+  std::array<int32_t, kFrameValues> _acc;
   std::map<Snowflake, float> _volumes;
   float _master = 1.0f;
 };

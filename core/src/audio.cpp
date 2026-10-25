@@ -11,7 +11,6 @@
 namespace nxcord {
 
 namespace {
-constexpr size_t kMaxBuffered = 8;  // 160 ms
 constexpr size_t kStartFrames = 2;  // 40 ms of jitter buffer before playing
 constexpr int kMaxConcealed = 3;
 constexpr int kHangoverFrames = 15;  // keep the gate open 300 ms after speech
@@ -25,6 +24,15 @@ void AudioMixer::clear() {
     if (s.decoder) opus_decoder_destroy(s.decoder);
   }
   _streams.clear();
+}
+
+void AudioMixer::enqueue(Stream &s, const int16_t *frame) {
+  if (s.count == kMaxBuffered) {  // full: drop the oldest frame
+    s.head = (s.head + 1) % kMaxBuffered;
+    s.count--;
+  }
+  std::memcpy(s.ring[(s.head + s.count) % kMaxBuffered].data(), frame, sizeof(int16_t) * kFrameValues);
+  s.count++;
 }
 
 void AudioMixer::push(uint32_t ssrc, const Snowflake &user_id, uint16_t seq, const uint8_t *opus, size_t len) {
@@ -45,51 +53,48 @@ void AudioMixer::push(uint32_t ssrc, const Snowflake &user_id, uint16_t seq, con
     int16_t gap = static_cast<int16_t>(seq - s.last_seq);
     if (gap <= 0) return;  // duplicate or late packet
     for (int i = 1; i < gap && i <= kMaxConcealed; i++) {
-      std::vector<int16_t> pcm(kFrameValues);
-      int n = opus_decode(s.decoder, nullptr, 0, pcm.data(), kFrameSamples, 0);
-      if (n > 0) {
-        pcm.resize(static_cast<size_t>(n) * kChannels);
-        s.frames.push_back(std::move(pcm));
-      }
+      if (opus_decode(s.decoder, nullptr, 0, _decoded.data(), kFrameSamples, 0) == kFrameSamples)
+        enqueue(s, _decoded.data());
     }
   }
   s.have_seq = true;
   s.last_seq = seq;
 
-  std::vector<int16_t> pcm(5760 * kChannels);
-  int n = opus_decode(s.decoder, opus, static_cast<opus_int32>(len), pcm.data(), 5760, 0);
+  int n = opus_decode(s.decoder, opus, static_cast<opus_int32>(len), _decoded.data(), kMaxPacketSamples, 0);
   if (n <= 0) return;
-  pcm.resize(static_cast<size_t>(n) * kChannels);
-  // Discord's silence frames decode to silence; still count as a frame.
-  s.frames.push_back(std::move(pcm));
-  while (s.frames.size() > kMaxBuffered) s.frames.pop_front();
+  // Discord sends 20 ms packets; split anything longer into 20 ms frames.
+  for (int off = 0; off < n; off += kFrameSamples) {
+    int take = std::min(kFrameSamples, n - off);
+    int16_t *frame = _decoded.data() + off * kChannels;
+    if (take < kFrameSamples) std::fill(frame + take * kChannels, frame + kFrameValues, 0);
+    enqueue(s, frame);
+  }
+  // Discord's silence frames decode to silence; they still count as frames.
   if (len > 3) s.last_heard = nowMs();
 }
 
 bool AudioMixer::mix(int16_t *out) {
-  std::vector<int32_t> acc(kFrameValues, 0);
   bool any = false;
-  {
-    std::scoped_lock lock(_mutex);
-    for (auto &[ssrc, s] : _streams) {
-      if (!s.started) {
-        if (s.frames.size() < kStartFrames) continue;
-        s.started = true;
-      }
-      if (s.frames.empty()) {
-        s.started = false;  // underrun: rebuffer
-        continue;
-      }
-      std::vector<int16_t> frame = std::move(s.frames.front());
-      s.frames.pop_front();
-      float vol = _master;
-      if (auto it = _volumes.find(s.user_id); it != _volumes.end()) vol *= it->second;
-      size_t n = std::min<size_t>(frame.size(), kFrameValues);
-      for (size_t i = 0; i < n; i++) acc[i] += static_cast<int32_t>(frame[i] * vol);
-      any = true;
+  std::scoped_lock lock(_mutex);
+  _acc.fill(0);
+  for (auto &[ssrc, s] : _streams) {
+    if (!s.started) {
+      if (s.count < kStartFrames) continue;
+      s.started = true;
     }
+    if (s.count == 0) {
+      s.started = false;  // underrun: rebuffer
+      continue;
+    }
+    const auto &frame = s.ring[s.head];
+    s.head = (s.head + 1) % kMaxBuffered;
+    s.count--;
+    float vol = _master;
+    if (auto it = _volumes.find(s.user_id); it != _volumes.end()) vol *= it->second;
+    for (int i = 0; i < kFrameValues; i++) _acc[i] += static_cast<int32_t>(frame[i] * vol);
+    any = true;
   }
-  for (int i = 0; i < kFrameValues; i++) out[i] = static_cast<int16_t>(std::clamp(acc[i], -32768, 32767));
+  for (int i = 0; i < kFrameValues; i++) out[i] = static_cast<int16_t>(std::clamp(_acc[i], -32768, 32767));
   return any;
 }
 
