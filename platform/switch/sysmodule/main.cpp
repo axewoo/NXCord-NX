@@ -4,6 +4,7 @@
 #include <nxcord/log.hpp>
 #include <nxcord/util.hpp>
 
+#include <sodium.h>
 #include <switch.h>
 #include <malloc.h>
 #include <sys/stat.h>
@@ -390,9 +391,29 @@ class NxcordService {
   bool _shutdown = false;
 };
 
+// libsodium's default RNG reads /dev/urandom, which doesn't exist here: it
+// aborts the process the first time a call starts. Use the kernel CSPRNG.
+const char *sodiumRandomName() { return "libnx"; }
+uint32_t sodiumRandom() {
+  uint32_t v;
+  randomGet(&v, sizeof(v));
+  return v;
+}
+void sodiumRandomBuf(void *buf, size_t size) { randomGet(buf, size); }
+
+const randombytes_implementation kSodiumRandom = {
+    .implementation_name = sodiumRandomName,
+    .random = sodiumRandom,
+    .stir = nullptr,
+    .uniform = nullptr,
+    .buf = sodiumRandomBuf,
+    .close = nullptr,
+};
+
 }  // namespace
 
 int main() {
+  randombytes_set_implementation(const_cast<randombytes_implementation *>(&kSodiumRandom));
   openLog();
   static NxcordService service;
   service.run();

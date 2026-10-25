@@ -112,6 +112,7 @@ class GuiNoService : public tsl::Gui {
       return;
     }
     if (!_launched || ++_ticks % 15 != 0) return;
+    service().close();
     if (R_SUCCEEDED(service().open())) {
       _shown_main = true;
       tsl::changeTo<GuiMain>();
@@ -471,7 +472,13 @@ class NxcordOverlay : public tsl::Overlay {
   void exitServices() override { service().close(); }
 
   std::unique_ptr<tsl::Gui> loadInitialGui() override {
-    if (!service().active()) return initially<GuiNoService>();
+    // A session to a sysmodule that has since exited still looks open, so
+    // check that it answers.
+    ipc::Status st;
+    if (!service().active() || R_FAILED(service().status(st))) {
+      service().close();
+      return initially<GuiNoService>();
+    }
     return initially<GuiMain>();
   }
 };
