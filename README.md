@@ -62,7 +62,7 @@ build-linux/platform/linux/nxcord-cli --token-file ~/.nxcord-token --join GUILD_
 
 # Full duplex through PipeWire: your mic goes in, the call comes out.
 pw-record --format s16 --rate 48000 --channels 2 - \
-  | build-linux/platform/linux/nxcord-cli --token-file ~/.nxcord-token --join GUILD_ID/CHANNEL_ID \
+  | build-linux/platform/linux/nxcord-cli --token-file ~/.nxcord-token --join GUILD_ID/CHANNEL_ID --pcm-out \
   | pw-play --format s16 --rate 48000 --channels 2 -
 ```
 

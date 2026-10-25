@@ -3,12 +3,12 @@
 //   export NXCORD_TOKEN=...            (or --token-file FILE)
 //   nxcord-cli --list
 //   pw-record --format s16 --rate 48000 --channels 2 - \
-//     | nxcord-cli --join GUILD_ID/CHANNEL_ID \
+//     | nxcord-cli --join GUILD_ID/CHANNEL_ID --pcm-out \
 //     | pw-play --format s16 --rate 48000 --channels 2 -
 //
-// Microphone PCM is read from stdin (s16le, 48 kHz, stereo) and the mixed
-// call audio is written to stdout in the same format. --tone sends a test
-// tone instead of reading stdin.
+// Microphone PCM is read from stdin (s16le, 48 kHz, stereo). With --pcm-out
+// the mixed call audio is written to stdout in the same format. --tone sends
+// a test tone instead of reading stdin.
 #include <nxcord/client.hpp>
 #include <nxcord/log.hpp>
 #include <nxcord/util.hpp>
@@ -34,7 +34,7 @@ std::atomic<bool> g_quit{false};
 void usage() {
   std::fprintf(stderr,
                "usage: nxcord-cli [--token-file FILE] [--verbose] (--list | --join GUILD/CHANNEL [--tone] "
-               "[--seconds N])\n");
+               "[--pcm-out] [--seconds N])\n");
 }
 
 bool readFrame(int16_t *pcm) {
@@ -63,7 +63,7 @@ const char *voiceStateName(Client::VoiceState s) {
 
 int main(int argc, char **argv) {
   std::string token_file, join;
-  bool list = false, tone = false;
+  bool list = false, tone = false, pcm_out = false;
   int seconds = 0;
   for (int i = 1; i < argc; i++) {
     std::string a = argv[i];
@@ -71,6 +71,7 @@ int main(int argc, char **argv) {
     else if (a == "--list") list = true;
     else if (a == "--join" && i + 1 < argc) join = argv[++i];
     else if (a == "--tone") tone = true;
+    else if (a == "--pcm-out") pcm_out = true;
     else if (a == "--seconds" && i + 1 < argc) seconds = std::atoi(argv[++i]);
     else if (a == "--verbose") log::setVerbose(true);
     else {
@@ -137,9 +138,9 @@ int main(int argc, char **argv) {
   }
   client.joinVoice(join.substr(0, slash), join.substr(slash + 1));
 
-  // Speaker: write one mixed frame every 20 ms. Only when stdout is piped,
-  // so a terminal doesn't get raw PCM.
-  bool to_stdout = !isatty(STDOUT_FILENO);
+  // Speaker: mix one frame every 20 ms; written to stdout only with --pcm-out
+  // (and never to a terminal).
+  bool to_stdout = pcm_out && !isatty(STDOUT_FILENO);
   std::thread speaker([&] {
     std::vector<int16_t> out(kFrameValues);
     int64_t next = nowMs();
