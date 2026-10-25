@@ -31,7 +31,7 @@ No privileged intents are needed.
 
 ```sh
 # Arch / CachyOS
-sudo pacman -S --needed base-devel cmake git mbedtls libsodium opus openssl
+sudo pacman -S --needed base-devel cmake git libsodium opus openssl
 git clone https://github.com/axewoo/NXCord-NX && cd NXCord-NX
 scripts/build-linux.sh        # first run also builds mlspp + libdave (~2 min)
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds the DAVE end-to-end encryption stack (OpenSSL 3 for Switch, Cisco
-# mlspp, Discord libdave) into a prefix.
+# mlspp, Discord libdave) into a prefix, plus mbedTLS 3 for the Linux CLI.
 #
 #   scripts/build-deps.sh switch [prefix]   # inside devkitpro/devkita64
 #   scripts/build-deps.sh linux  [prefix]   # host build for the test CLI
@@ -16,6 +16,7 @@ JOBS=$(nproc)
 OPENSSL_TAG=openssl-3.0.15
 MLSPP_COMMIT=1cc50a124a3bc4e143a787ec934280dc70c1034d  # the version libdave pins
 JSON_TAG=v3.11.3
+MBEDTLS_TAG=mbedtls-3.6.2  # Linux only; distros ship it in different places
 LIBDAVE_COMMIT=6396c90aedbb9a6ee117ea9ce1ce9832af6a3375
 
 mkdir -p "$SRC" "$BUILD" "$PREFIX"
@@ -49,13 +50,20 @@ if [ "$PLATFORM" = switch ]; then
       # No OS services we can't provide: entropy comes from getentropy(),
       # which platform/switch/compat implements with the kernel CSPRNG.
       ./Configure linux-generic64 no-asm no-shared no-dso no-threads no-sock no-ui-console no-tests \
-        no-engine no-afalgeng no-async no-apps --prefix="$PREFIX" --openssldir="$PREFIX/ssl" \
+        no-engine no-afalgeng no-async --prefix="$PREFIX" --openssldir="$PREFIX/ssl" \
         -DOPENSSL_RAND_SEED_OS >/dev/null
       make -j"$JOBS" build_libs >/dev/null
       make install_dev >/dev/null
     )
   fi
   CMAKE_ARGS+=(-DOPENSSL_ROOT_DIR="$PREFIX" -DOPENSSL_USE_STATIC_LIBS=ON)
+else
+  fetch mbedtls https://github.com/Mbed-TLS/mbedtls "$MBEDTLS_TAG"
+  git -C "$SRC/mbedtls" submodule update -q --init --depth 1
+  cmake -S "$SRC/mbedtls" -B "$BUILD/mbedtls" "${CMAKE_ARGS[@]}" -DENABLE_TESTING=OFF -DENABLE_PROGRAMS=OFF \
+    -DMBEDTLS_FATAL_WARNINGS=OFF >/dev/null
+  cmake --build "$BUILD/mbedtls" -j"$JOBS" >/dev/null
+  cmake --install "$BUILD/mbedtls" >/dev/null
 fi
 
 cmake -S "$SRC/json" -B "$BUILD/json" "${CMAKE_ARGS[@]}" -DJSON_BuildTests=OFF >/dev/null
