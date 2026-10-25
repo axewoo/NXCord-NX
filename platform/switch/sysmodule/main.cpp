@@ -28,7 +28,7 @@ u32 __nx_fs_num_sessions = 1;
 // Everything (TLS, JSON, Opus, MLS, thread stacks) lives in this heap. It
 // comes out of the system memory pool, which Horizon itself needs too, so
 // keep it small.
-#define INNER_HEAP_SIZE 0x280000
+#define INNER_HEAP_SIZE 0x1C0000
 size_t nx_inner_heap_size = INNER_HEAP_SIZE;
 char nx_inner_heap[INNER_HEAP_SIZE];
 

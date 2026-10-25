@@ -20,8 +20,10 @@ constexpr const char *kTitle = "NXCord";
 
 // What the sysmodule takes from the system pool (code + heap + stack,
 // measured from the build), and what we leave free for Horizon after that.
+// Leaving 3.3 MB free worked on hardware; 2.3 MB starved the system (other
+// processes and overlay loading need room too).
 constexpr u64 kSysmoduleFootprint = NXCORD_SYS_FOOTPRINT;
-constexpr u64 kMinFreeAfterStart = 0x180000;
+constexpr u64 kMinFreeAfterStart = 0x2C0000;
 
 std::string megabytes(u64 bytes) {
   char buf[16];
