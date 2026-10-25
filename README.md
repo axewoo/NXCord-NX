@@ -1,87 +1,71 @@
-# NXCord
-[![GitHub](https://img.shields.io/github/license/Grarak/NXCord)](https://github.com/Grarak/NXCord/blob/master/LICENSE)
-[![GitHub release (latest by date including pre-releases)](https://img.shields.io/github/v/release/Grarak/NXCord?include_prereleases)](https://github.com/Grarak/NXCord/releases)
-[![GitHub All Releases](https://img.shields.io/github/downloads/Grarak/NXCord/total)](https://github.com/Grarak/NXCord/releases)
-[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2FGrarak%2FNXCord.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2FGrarak%2FNXCord?ref=badge_shield)
-[![NXCord](https://github.com/Grarak/NXCord/workflows/NXCord/badge.svg)](https://github.com/Grarak/NXCord/actions)
+# NXCord-NX
 
-## Unofficial Nintendo Switch Discord client
-Discord's TOS forbids the use of third party clients, thus use at your own risk! Also a lot of code has been taken from
-https://github.com/yourWaifu/Unofficial-Discord-3DS-Client, so thanks a lot for yourWaifu's 3ds client.
+Discord voice chat on the Nintendo Switch that keeps running while you play.
+A revival of [Grarak/NXCord](https://github.com/Grarak/NXCord) for 2026 Discord:
+gateway v10, voice gateway v8 with `aead_xchacha20_poly1305_rtpsize` transport
+encryption, and **DAVE end-to-end encryption** (Discord's
+[libdave](https://github.com/discord/libdave) + Cisco
+[mlspp](https://github.com/cisco/mlspp) + OpenSSL 3, cross-compiled for Horizon).
 
-<img src="screenshots/1.jpg" width="250"/><img src="screenshots/2.jpg" width="250"/><img src="screenshots/3.jpg" width="250"/><img src="screenshots/4.jpg" width="250"/><img src="screenshots/5.jpg" width="250"/>
+> **Work in progress.** The portable core and a Linux test CLI build today; the
+> Switch sysmodule and Ultrahand/Tesla overlay are next.
 
-## Installation and usage
-Download the latest build from [Releases](https://github.com/Grarak/NXCord/releases). Extract it to the root of your
-sdcard you use for your switch. You do need to reboot your system, otherwise the sysmodule won't start running. After
-rebooting you can open NXCord in homebrew menu and you will see a login screen, if it's your first time using it.
+## Bot account, not your account
 
-### Using a bot
-Since selfbotting is not allowed, I'd recommend you to use a bot. If you don't know how to do it, just follow these
-[simple steps](https://github.com/reactiflux/discord-irc/wiki/Creating-a-discord-bot-&-getting-a-token). After copying
-the token and inviting the bot to your desired discord server, create a file named ```/config/nxcord/nxcord.ini``` and
-put your token there. For example your first line in the file should be ```token=<your token>```. You need to restart
-your switch after modifying that file.
+NXCord-NX logs in with a **bot token**. Logging in with your own account token
+("self-botting") is against Discord's Terms of Service and can get the account
+banned, so it isn't supported. You'll appear in voice as your bot (name it
+something like "Axel (Switch)"), and only in servers you've invited it to.
 
-### Selfbotting
-Selfbotting means that you are using a third party client to access discord with an user account. It's against the TOS of
-discord, thus not recommended. I've been using an user account for testing for months already and haven't been banned yet.
-Might be safe, but I am not responsible for any bans!
+1. Go to <https://discord.com/developers/applications>, then **New Application**.
+2. Under **Bot**, use **Reset Token** and copy the token. Keep it secret.
+3. Under **OAuth2 → URL Generator**, tick the `bot` scope and the **View Channels**,
+   **Connect**, **Speak** and **Use Voice Activity** permissions. Open the generated URL to
+   invite the bot to your server.
 
-## Limitations and bugs
-Because this whole application is actually running in the background as a custom sysmodule, there are memory restrictions.
-Discord is a memory hog, thus you will hit the memory limit of Atmosphere rather quickly. Even the login process alone, can
-take up to 20MiB. Fetching channel information of big discord servers will probably crash your switch. So if you ever see the
-sysmodule crashed screen, you will have to use a different account/bot. I'd recommend you to only join one or two not so
-busy servers.
+No privileged intents are needed.
 
-If you don't really care about the sysmodule aspect of this project you can also use the
-[standalone client](https://github.com/Grarak/NXCord/actions) version. It won't run in the background and you can use a
-discord account as big as you like.
+## Testing on a PC first (nxcord-cli)
 
-Also right now a lot of features are missing. Head over to [projects](https://github.com/Grarak/NXCord/projects) to see
-what possible features are planned for the future.
+`nxcord-cli` runs the exact same Discord/voice/DAVE code as the Switch build.
 
-### Microphone
-The switch itself doesn't have any external microphones, so you do need to plug in headphones/earbuds to actually utilise
-speaking.
+```sh
+# Arch / CachyOS
+sudo pacman -S --needed base-devel cmake git mbedtls libsodium opus openssl
+git clone https://github.com/axewoo/NXCord-NX && cd NXCord-NX
+scripts/build-linux.sh        # first run also builds mlspp + libdave (~2 min)
 
-### Tesla overlay
-Right now there are two bugs.
-- When you open NXCord in the overlay menu, the overlay itself will disappear. Just reopen it.
-- Voice channel won't refresh by itself when participants join or leave. Press B and reopen to manually refresh.
-
-## Building NXCord
-
-### Dependencies
-For building you need to install dependencies first.
-
-Assuming you have devkitpro and libnx installed, just run:
-```
-$ (dkp-)pacman -S switch-libsodium switch-mbedtls switch-zlib switch-sdl2 \
-  switch-sdl2_ttf switch-sdl2_image switch-sdl2_gfx switch-sdl2_mixer \
-  switch-mesa switch-glad switch-glm switch-libdrm_nouveau switch-libwebp \
-  switch-libpng switch-freetype switch-bzip2 switch-libjpeg-turbo switch-opusfile \
-  switch-libopus
-```
-```
-$ git clone --recurse-submodules git@github.com:Grarak/NXCord.git
-$ cd NXCord
-$ mkdir build
-$ cmake -DCMAKE_TOOLCHAIN_FILE=../DevkitA64Libnx.cmake ..
-$ make
+echo 'YOUR_BOT_TOKEN' > ~/.nxcord-token && chmod 600 ~/.nxcord-token
+build-linux/platform/linux/nxcord-cli --token-file ~/.nxcord-token --list
 ```
 
-### Build options
-There are several different build variants:
-- Client without IPC:
-```
-$ cmake -DCMAKE_TOOLCHAIN_FILE=../DevkitA64Libnx.cmake -DENABLE_CLIENT_STANDALONE=ON ..
-```
-- Sysmodule without IPC:
-```
-$ cmake -DCMAKE_TOOLCHAIN_FILE=../DevkitA64Libnx.cmake -DENABLE_SYSMODULE_APPLICATION=ON ..
+`--list` prints every server and voice channel as `GUILD_ID/CHANNEL_ID`. Then:
+
+```sh
+# Beep test: the bot joins and plays a 440 Hz beep every second for 30 s.
+build-linux/platform/linux/nxcord-cli --token-file ~/.nxcord-token --join GUILD_ID/CHANNEL_ID --tone --seconds 30
+
+# Full duplex through PipeWire: your mic goes in, the call comes out.
+pw-record --format s16 --rate 48000 --channels 2 - \
+  | build-linux/platform/linux/nxcord-cli --token-file ~/.nxcord-token --join GUILD_ID/CHANNEL_ID \
+  | pw-play --format s16 --rate 48000 --channels 2 -
 ```
 
-## License
-[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2FGrarak%2FNXCord.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2FGrarak%2FNXCord?ref=badge_large)
+Add `--verbose` to see every gateway/DAVE step. The status line says
+`connected (end-to-end encrypted)` once the DAVE handshake finished.
+
+## Layout
+
+| Path | What |
+|------|------|
+| `core/` | Portable C++17: TLS (mbedTLS), websocket, gateway, voice + DAVE, Opus mixer |
+| `platform/linux/` | `nxcord-cli` test tool |
+| `platform/switch/` | Sysmodule, overlay (in progress) |
+| `scripts/build-deps.sh` | Builds OpenSSL 3 (Switch), mlspp and libdave into `deps/<platform>` |
+
+## Credits
+
+- Original NXCord by Willi Ye (Grarak), MIT.
+- [libdave](https://github.com/discord/libdave) (MIT), [mlspp](https://github.com/cisco/mlspp) (BSD-2),
+  OpenSSL (Apache-2.0), libsodium, Opus, mbedTLS, nlohmann/json.
+- Protocol details cross-checked against [D++](https://github.com/brainboxdotcc/DPP).
