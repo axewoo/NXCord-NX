@@ -1,87 +1,137 @@
-# NXCord
-[![GitHub](https://img.shields.io/github/license/Grarak/NXCord)](https://github.com/Grarak/NXCord/blob/master/LICENSE)
-[![GitHub release (latest by date including pre-releases)](https://img.shields.io/github/v/release/Grarak/NXCord?include_prereleases)](https://github.com/Grarak/NXCord/releases)
-[![GitHub All Releases](https://img.shields.io/github/downloads/Grarak/NXCord/total)](https://github.com/Grarak/NXCord/releases)
-[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2FGrarak%2FNXCord.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2FGrarak%2FNXCord?ref=badge_shield)
-[![NXCord](https://github.com/Grarak/NXCord/workflows/NXCord/badge.svg)](https://github.com/Grarak/NXCord/actions)
+# NXCord-NX
 
-## Unofficial Nintendo Switch Discord client
-Discord's TOS forbids the use of third party clients, thus use at your own risk! Also a lot of code has been taken from
-https://github.com/yourWaifu/Unofficial-Discord-3DS-Client, so thanks a lot for yourWaifu's 3ds client.
+Discord voice chat on the Nintendo Switch that keeps running while you play.
+A revival of [Grarak/NXCord](https://github.com/Grarak/NXCord) for 2026 Discord:
+gateway v10, voice gateway v8 with `aead_xchacha20_poly1305_rtpsize` transport
+encryption, and **DAVE end-to-end encryption** (Discord's
+[libdave](https://github.com/discord/libdave) + Cisco
+[mlspp](https://github.com/cisco/mlspp) + OpenSSL 3, cross-compiled for Horizon).
 
-<img src="screenshots/1.jpg" width="250"/><img src="screenshots/2.jpg" width="250"/><img src="screenshots/3.jpg" width="250"/><img src="screenshots/4.jpg" width="250"/><img src="screenshots/5.jpg" width="250"/>
+> [!WARNING]
+> **This project is archived.** I'm no longer working on it and won't answer
+> issues or pull requests. You're welcome to use it, fork it and build on it
+> under the licenses below, but it is unfinished beta software: use it at your
+> own risk.
 
-## Installation and usage
-Download the latest build from [Releases](https://github.com/Grarak/NXCord/releases). Extract it to the root of your
-sdcard you use for your switch. You do need to reboot your system, otherwise the sysmodule won't start running. After
-rebooting you can open NXCord in homebrew menu and you will see a login screen, if it's your first time using it.
+## Status when it was archived
 
-### Using a bot
-Since selfbotting is not allowed, I'd recommend you to use a bot. If you don't know how to do it, just follow these
-[simple steps](https://github.com/reactiflux/discord-irc/wiki/Creating-a-discord-bot-&-getting-a-token). After copying
-the token and inviting the bot to your desired discord server, create a file named ```/config/nxcord/nxcord.ini``` and
-put your token there. For example your first line in the file should be ```token=<your token>```. You need to restart
-your switch after modifying that file.
+What was tested on a real Switch OLED (firmware 21.2, Atmosphère 1.12.1) and on Linux:
 
-### Selfbotting
-Selfbotting means that you are using a third party client to access discord with an user account. It's against the TOS of
-discord, thus not recommended. I've been using an user account for testing for months already and haven't been banned yet.
-Might be safe, but I am not responsible for any bans!
+| Feature | State |
+|---------|-------|
+| Discord login (bot token), server and channel list | Works |
+| Joining a voice channel, DAVE end-to-end encryption | Works |
+| Hearing the call on the Switch while a game runs | Works (beta5 fixed crackles caused by heap exhaustion) |
+| Talking from the Switch with a USB headset | **Untested**: never tried with a mic |
+| PC test tool (`nxcord-cli`): beep test and full duplex | Works |
+| Start at boot | Works but risky: see the memory notes below |
 
-## Limitations and bugs
-Because this whole application is actually running in the background as a custom sysmodule, there are memory restrictions.
-Discord is a memory hog, thus you will hit the memory limit of Atmosphere rather quickly. Even the login process alone, can
-take up to 20MiB. Fetching channel information of big discord servers will probably crash your switch. So if you ever see the
-sysmodule crashed screen, you will have to use a different account/bot. I'd recommend you to only join one or two not so
-busy servers.
+Known limits:
 
-If you don't really care about the sysmodule aspect of this project you can also use the
-[standalone client](https://github.com/Grarak/NXCord/actions) version. It won't run in the background and you can use a
-discord account as big as you like.
+- **System memory is tight.** The sysmodule uses about 5.4 MB of the Switch's
+  system memory pool. A beta that used 8.7 MB made `am` crash at boot
+  (2001-0132), and one that left only about 2.3 MB free kept itself and
+  Ultrahand from starting. How much is free depends on your other sysmodules,
+  so start it from the overlay, which checks first.
+- The heap is 1.75 MB. Very busy calls (many people talking) were never tested.
+- Screen sharing and text chat were never started.
 
-Also right now a lot of features are missing. Head over to [projects](https://github.com/Grarak/NXCord/projects) to see
-what possible features are planned for the future.
+If you pick it up, the PC tool is the quickest way to work on the Discord side:
+it runs the same core code as the Switch build.
 
-### Microphone
-The switch itself doesn't have any external microphones, so you do need to plug in headphones/earbuds to actually utilise
-speaking.
+## Bot account, not your account
 
-### Tesla overlay
-Right now there are two bugs.
-- When you open NXCord in the overlay menu, the overlay itself will disappear. Just reopen it.
-- Voice channel won't refresh by itself when participants join or leave. Press B and reopen to manually refresh.
+NXCord-NX logs in with a **bot token**. Logging in with your own account token
+("self-botting") is against Discord's Terms of Service and can get the account
+banned, so it isn't supported. You'll appear in voice as your bot (name it
+something like "Axel (Switch)"), and only in servers you've invited it to.
 
-## Building NXCord
+1. Go to <https://discord.com/developers/applications>, then **New Application**.
+2. Under **Bot**, use **Reset Token** and copy the token. Keep it secret.
+3. Under **OAuth2 → URL Generator**, tick the `bot` scope and the **View Channels**,
+   **Connect**, **Speak** and **Use Voice Activity** permissions. Open the generated URL to
+   invite the bot to your server.
 
-### Dependencies
-For building you need to install dependencies first.
+No privileged intents are needed.
 
-Assuming you have devkitpro and libnx installed, just run:
+## Installing on the Switch
+
+Needs Atmosphère and Ultrahand (or any Tesla overlay loader), plus a **wired USB
+headset or USB mic** for talking: the Switch has no built-in mic, and Bluetooth
+headsets are output-only.
+
+1. Download `NXCord-NX.zip` from [Releases](../../releases), or build it yourself (see
+   [Building for Switch](#building-for-switch)), and copy its contents to the root of the SD card.
+2. Put your bot token alone on the first line of `/config/nxcord/token.txt`.
+3. Open Ultrahand (L + D-pad Down + R3), pick **NXCord**, then **Start NXCord**,
+   then **Join a channel**.
+
+The sysmodule keeps the call running while you play; the overlay only controls
+it. It needs about 5.5 MB of the Switch's system memory pool, which other
+sysmodules and Horizon itself share, so it doesn't start at boot unless you turn
+on **Start at boot** in Settings. The overlay checks free memory before starting
+it. Use **Turn NXCord off** in Settings to give the memory back. If the console
+ever fails to boot with it enabled, delete
+`/atmosphere/contents/5600000000000000/flags/boot2.flag` from the SD card.
+
+Settings (mic sensitivity, mic boost, call volume, rejoin last channel)
+are in the overlay and saved to `/config/nxcord/settings.ini`. Set
+`verbose_log=1` there for a detailed log.
+
+## Testing on a PC first (nxcord-cli)
+
+`nxcord-cli` runs the exact same Discord/voice/DAVE code as the Switch build.
+
+```sh
+# Arch / CachyOS
+sudo pacman -S --needed base-devel cmake git libsodium opus openssl
+git clone https://github.com/axewoo/NXCord-NX && cd NXCord-NX
+scripts/build-linux.sh        # first run also builds mlspp + libdave (~2 min)
+
+echo 'YOUR_BOT_TOKEN' > ~/.nxcord-token && chmod 600 ~/.nxcord-token
+build-linux/platform/linux/nxcord-cli --token-file ~/.nxcord-token --list
 ```
-$ (dkp-)pacman -S switch-libsodium switch-mbedtls switch-zlib switch-sdl2 \
-  switch-sdl2_ttf switch-sdl2_image switch-sdl2_gfx switch-sdl2_mixer \
-  switch-mesa switch-glad switch-glm switch-libdrm_nouveau switch-libwebp \
-  switch-libpng switch-freetype switch-bzip2 switch-libjpeg-turbo switch-opusfile \
-  switch-libopus
-```
-```
-$ git clone --recurse-submodules git@github.com:Grarak/NXCord.git
-$ cd NXCord
-$ mkdir build
-$ cmake -DCMAKE_TOOLCHAIN_FILE=../DevkitA64Libnx.cmake ..
-$ make
+
+`--list` prints every server and voice channel as `GUILD_ID/CHANNEL_ID`. Then:
+
+```sh
+# Beep test: the bot joins and plays a 440 Hz beep every second for 30 s.
+build-linux/platform/linux/nxcord-cli --token-file ~/.nxcord-token --join GUILD_ID/CHANNEL_ID --tone --seconds 30
+
+# Full duplex through PipeWire: your mic goes in, the call comes out.
+pw-record --format s16 --rate 48000 --channels 2 - \
+  | build-linux/platform/linux/nxcord-cli --token-file ~/.nxcord-token --join GUILD_ID/CHANNEL_ID --pcm-out \
+  | pw-play --format s16 --rate 48000 --channels 2 -
 ```
 
-### Build options
-There are several different build variants:
-- Client without IPC:
-```
-$ cmake -DCMAKE_TOOLCHAIN_FILE=../DevkitA64Libnx.cmake -DENABLE_CLIENT_STANDALONE=ON ..
-```
-- Sysmodule without IPC:
-```
-$ cmake -DCMAKE_TOOLCHAIN_FILE=../DevkitA64Libnx.cmake -DENABLE_SYSMODULE_APPLICATION=ON ..
+Add `--verbose` to see every gateway/DAVE step. The status line says
+`connected (end-to-end encrypted)` once the DAVE handshake finished.
+
+## Layout
+
+| Path | What |
+|------|------|
+| `core/` | Portable C++17: TLS (mbedTLS), websocket, gateway, voice + DAVE, Opus mixer |
+| `platform/linux/` | `nxcord-cli` test tool |
+| `platform/switch/sysmodule/` | Background sysmodule: Discord client, audin/audout, IPC service `nxcord` |
+| `platform/switch/overlay/` | Tesla/Ultrahand overlay (libtesla) |
+| `scripts/build-switch.sh` | Builds everything for Switch inside `devkitpro/devkita64` |
+| `scripts/build-deps.sh` | Builds OpenSSL 3 (Switch), mlspp and libdave into `deps/<platform>` |
+
+## Building for Switch
+
+```sh
+docker run --rm -v "$PWD:/src" -w /src devkitpro/devkita64 scripts/build-switch.sh
 ```
 
-## License
-[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2FGrarak%2FNXCord.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2FGrarak%2FNXCord?ref=badge_large)
+The first run builds OpenSSL 3, mlspp and libdave for Horizon (~3 min). Output
+is `build-switch/sd/` (SD card layout) and `build-switch/NXCord-NX.zip`.
+
+## Credits
+
+- Original NXCord by Willi Ye (Grarak), MIT.
+- [libdave](https://github.com/discord/libdave) (MIT), [mlspp](https://github.com/cisco/mlspp) (BSD-2),
+  OpenSSL (Apache-2.0), libsodium, Opus, mbedTLS, nlohmann/json.
+- [libtesla](https://github.com/WerWolv/libtesla) (GPL-2.0) for the overlay, so the overlay
+  binary is GPL-2.0.
+- Protocol details cross-checked against [D++](https://github.com/brainboxdotcc/DPP).
