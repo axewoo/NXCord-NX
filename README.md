@@ -7,7 +7,37 @@ encryption, and **DAVE end-to-end encryption** (Discord's
 [libdave](https://github.com/discord/libdave) + Cisco
 [mlspp](https://github.com/cisco/mlspp) + OpenSSL 3, cross-compiled for Horizon).
 
-> **Beta.** Needs testing on real calls. Please report what `/config/nxcord/log.txt` says.
+> [!WARNING]
+> **This project is archived.** I'm no longer working on it and won't answer
+> issues or pull requests. You're welcome to use it, fork it and build on it
+> under the licenses below, but it is unfinished beta software: use it at your
+> own risk.
+
+## Status when it was archived
+
+What was tested on a real Switch OLED (firmware 21.2, Atmosphère 1.12.1) and on Linux:
+
+| Feature | State |
+|---------|-------|
+| Discord login (bot token), server and channel list | Works |
+| Joining a voice channel, DAVE end-to-end encryption | Works |
+| Hearing the call on the Switch while a game runs | Works (beta5 fixed crackles caused by heap exhaustion) |
+| Talking from the Switch with a USB headset | **Untested**: never tried with a mic |
+| PC test tool (`nxcord-cli`): beep test and full duplex | Works |
+| Start at boot | Works but risky: see the memory notes below |
+
+Known limits:
+
+- **System memory is tight.** The sysmodule uses about 5.4 MB of the Switch's
+  system memory pool. A beta that used 8.7 MB made `am` crash at boot
+  (2001-0132), and one that left only about 2.3 MB free kept itself and
+  Ultrahand from starting. How much is free depends on your other sysmodules,
+  so start it from the overlay, which checks first.
+- The heap is 1.75 MB. Very busy calls (many people talking) were never tested.
+- Screen sharing and text chat were never started.
+
+If you pick it up, the PC tool is the quickest way to work on the Discord side:
+it runs the same core code as the Switch build.
 
 ## Bot account, not your account
 
@@ -30,8 +60,8 @@ Needs Atmosphère and Ultrahand (or any Tesla overlay loader), plus a **wired US
 headset or USB mic** for talking: the Switch has no built-in mic, and Bluetooth
 headsets are output-only.
 
-1. Download `NXCord-NX.zip` from the latest release (or the `NXCord-NX-sd` CI artifact) and
-   copy its contents to the root of the SD card.
+1. Download `NXCord-NX.zip` from [Releases](../../releases), or build it yourself (see
+   [Building for Switch](#building-for-switch)), and copy its contents to the root of the SD card.
 2. Put your bot token alone on the first line of `/config/nxcord/token.txt`.
 3. Open Ultrahand (L + D-pad Down + R3), pick **NXCord**, then **Start NXCord**,
    then **Join a channel**.
@@ -42,7 +72,9 @@ sysmodules and Horizon itself share, so it doesn't start at boot unless you turn
 on **Start at boot** in Settings. The overlay checks free memory before starting
 it. Use **Turn NXCord off** in Settings to give the memory back. If the console
 ever fails to boot with it enabled, delete
-`/atmosphere/contents/5600000000000000/flags/boot2.flag` from the SD card. Settings (mic sensitivity, mic boost, call volume, rejoin last channel)
+`/atmosphere/contents/5600000000000000/flags/boot2.flag` from the SD card.
+
+Settings (mic sensitivity, mic boost, call volume, rejoin last channel)
 are in the overlay and saved to `/config/nxcord/settings.ini`. Set
 `verbose_log=1` there for a detailed log.
 
